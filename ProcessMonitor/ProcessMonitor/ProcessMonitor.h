@@ -1,17 +1,18 @@
-#pragma once
+#ifndef PROCESSMONITOR_H
+#define PROCESSMONITOR_H
 
-#include <QtWidgets/QMainWindow>
-#include "ui_ProcessMonitor.h"
+#include <QString>
 
-class ProcessMonitor : public QMainWindow
+/**
+ * Статический класс для работы с системными процессами Windows.
+ */
+class ProcessMonitor
 {
-    Q_OBJECT
-
 public:
-    ProcessMonitor(QWidget *parent = nullptr);
-    ~ProcessMonitor();
-
-private:
-    Ui::ProcessMonitorClass ui;
+    static bool isProcessRunning(const QString& filePath, int& outPid);
+    static bool terminateProcess(int pid);
+    static bool launchProcess(const QString& filePath, const QString& arguments, int& outPid);
+    static QString getProcessStatus(int pid); // "Running" или "Not Responding"
 };
 
+#endif // PROCESSMANAGER_H
