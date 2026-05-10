@@ -11,7 +11,7 @@
 bool ProcessMonitor::isProcessRunning(const QString& filePath, int& outPid)
 {
     QFileInfo fi(filePath);
-    QString targetName = fi.fileName();  // "calc.exe"
+    QString targetName = fi.fileName().toLower();
     if (targetName.isEmpty()) return false;
 
     HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
@@ -19,29 +19,54 @@ bool ProcessMonitor::isProcessRunning(const QString& filePath, int& outPid)
 
     PROCESSENTRY32W pe;
     pe.dwSize = sizeof(PROCESSENTRY32W);
+    DWORD foundPid = 0;
+
     if (Process32FirstW(hSnapshot, &pe)) {
         do {
-            QString procName = QString::fromWCharArray(pe.szExeFile);
-            if (procName.compare(targetName, Qt::CaseInsensitive) == 0) {
-                outPid = pe.th32ProcessID;
-                CloseHandle(hSnapshot);
-                return true;
+            QString procName = QString::fromWCharArray(pe.szExeFile).toLower();
+            if (procName == targetName) {
+                HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pe.th32ProcessID);
+                if (hProcess) {
+                    wchar_t pathBuf[MAX_PATH];
+                    if (GetModuleFileNameExW(hProcess, NULL, pathBuf, MAX_PATH) > 0) {
+                        QString fullPath = QString::fromWCharArray(pathBuf).toLower();
+                        if (fullPath.contains(targetName)) {
+                            foundPid = pe.th32ProcessID;
+                            CloseHandle(hProcess);
+                            break;
+                        }
+                    }
+                    CloseHandle(hProcess);
+                }
             }
         } while (Process32NextW(hSnapshot, &pe));
     }
     CloseHandle(hSnapshot);
+    if (foundPid != 0) {
+        outPid = foundPid;
+        return true;
+    }
     return false;
 }
 
 bool ProcessMonitor::terminateProcess(int pid)
 {
-    HANDLE hProcess = OpenProcess(PROCESS_TERMINATE, FALSE, pid);
+    HANDLE hProcess = OpenProcess(PROCESS_TERMINATE | PROCESS_QUERY_INFORMATION, FALSE, pid);
     if (!hProcess) {
         DWORD err = GetLastError();
-        Logger::log(QString("OpenProcess failed for PID %1, error code %2").arg(pid).arg(err));
+        Logger::log(QString("OpenProcess failed for PID %1, error: %2").arg(pid).arg(err));
+        if (err == ERROR_ACCESS_DENIED) {
+            Logger::log("Access denied. Try running as administrator.");
+        }
         return false;
     }
-    BOOL result = TerminateProcess(hProcess, 0);
+    DWORD exitCode = 0;
+    GetExitCodeProcess(hProcess, &exitCode);
+    if (exitCode != STILL_ACTIVE) {
+        CloseHandle(hProcess);
+        return true;
+    }
+    BOOL result = TerminateProcess(hProcess, 1);
     DWORD err = GetLastError();
     CloseHandle(hProcess);
     if (result) {
@@ -49,7 +74,7 @@ bool ProcessMonitor::terminateProcess(int pid)
         return true;
     }
     else {
-        Logger::log(QString("TerminateProcess failed for PID %1, error code %2").arg(pid).arg(err));
+        Logger::log(QString("TerminateProcess failed for PID %1, error: %2").arg(pid).arg(err));
         return false;
     }
 }

@@ -37,27 +37,11 @@ void AppInfo::terminate()
         .arg(displayName()).arg(pid).arg(autoRestart));
 
     if (pid != 0) {
-        // Дополнительная проверка: реально ли процесс с таким PID существует?
-        int checkPid = 0;
-        bool exists = ProcessMonitor::isProcessRunning(filePath, checkPid);
-        Logger::log(QString("Before termination: process exists? %1, found PID=%2").arg(exists).arg(checkPid));
-
         if (ProcessMonitor::terminateProcess(pid)) {
-            // После supposed termination - проверим, действительно ли процесс исчез
-            int afterPid = 0;
-            bool stillExists = ProcessMonitor::isProcessRunning(filePath, afterPid);
-            Logger::log(QString("After terminateProcess: process still exists? %1, PID=%2")
-                .arg(stillExists).arg(afterPid));
-
-            if (ProcessMonitor::terminateProcess(pid)) {
-                // Принудительно сбрасываем autoRestart, даже если есть другие экземпляры
-                Logger::log("Terminated by user: " + displayName() + " (PID: " + QString::number(pid) + ")");
-                pid = 0;
-                status = "Stopped";
-                autoRestart = false;   // <-- сбрасываем всегда после попытки завершения
-                // Но если процесс всё ещё жив (stillExists), но это уже другой экземпляр,
-                // то мы его не трогаем и не перезапускаем.
-            }
+            pid = 0;
+            status = "Stopped";
+            autoRestart = false;
+            Logger::log("Terminated by user: " + displayName());
         }
         else {
             Logger::log("Failed to terminate: " + displayName());
